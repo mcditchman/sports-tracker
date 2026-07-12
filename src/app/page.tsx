@@ -1,65 +1,103 @@
-import Image from "next/image";
+import TrendFilters from '@/components/TrendFilters'
+import TrendChart from '@/components/TrendChart'
+import SummaryStats from '@/components/SummaryStats'
+import EmptyState from '@/components/EmptyState'
+import { getLeagues, getStatTypes, getTeams } from '@/lib/queries/lookups'
+import { getTrend, type TrendFilters as Filters } from '@/lib/queries/trends'
+import { computeTrendSummary } from '@/lib/stats/summary'
+import { linesForStat } from '@/lib/stats/lines'
 
-export default function Home() {
+export const dynamic = 'force-dynamic'
+
+interface SearchParams {
+  league?: string
+  team?: string
+  stat?: string
+  window?: string
+  venue?: string
+  opponent?: string
+}
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>
+}) {
+  const params = await searchParams
+  const leagues = await getLeagues()
+  const leagueId = params.league ?? leagues[0]?.id ?? ''
+  const league = leagues.find((l) => l.id === leagueId)
+
+  const [teams, statTypes] = await Promise.all([
+    leagueId ? getTeams(leagueId) : Promise.resolve([]),
+    league ? getStatTypes(league.sport_id) : Promise.resolve([]),
+  ])
+
+  // "corners" → taken, "corners:against" → conceded
+  const statOptions = statTypes.flatMap((s) => [
+    { value: s.id, label: `${s.name}${s.unit === 'percent' ? '' : ' (for)'}` },
+    ...(s.unit === 'percent'
+      ? []
+      : [{ value: `${s.id}:against`, label: `${s.name} (conceded)` }]),
+  ])
+
+  const [statTypeId, perspectiveRaw] = (params.stat ?? '').split(':')
+  const statType = statTypes.find((s) => s.id === statTypeId)
+  const filters: Filters | null =
+    params.team && statType
+      ? {
+          teamId: params.team,
+          statTypeId: statType.id,
+          perspective: perspectiveRaw === 'against' ? 'against' : 'for',
+          window: (['last5', 'last10', 'last20', 'season'] as const).includes(
+            params.window as never
+          )
+            ? (params.window as Filters['window'])
+            : 'last10',
+          venue: (['home', 'away'] as const).includes(params.venue as never)
+            ? (params.venue as Filters['venue'])
+            : 'all',
+          opponentTeamId: params.opponent || undefined,
+        }
+      : null
+
+  const points = filters ? await getTrend(filters) : []
+  const summary = filters ? computeTrendSummary(points, linesForStat(statType!.id)) : null
+  const teamName = teams.find((t) => t.id === params.team)?.name
+  const statLabel = statOptions.find((o) => o.value === params.stat)?.label ?? ''
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+    <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-10">
+      <header>
+        <h1 className="text-2xl font-bold">Prop Trends</h1>
+        <p className="text-sm text-zinc-500">
+          Historical stat trends for prop research. No odds, no bets — just the numbers.
+        </p>
+      </header>
+
+      <TrendFilters
+        leagues={leagues.map((l) => ({ value: l.id, label: l.name }))}
+        teams={teams.map((t) => ({ value: t.id, label: t.name }))}
+        stats={statOptions}
+      />
+
+      {!filters ? (
+        <EmptyState message="Pick a team and a stat to see the trend." />
+      ) : points.length === 0 ? (
+        <EmptyState message="Not enough data yet for this selection. Try a wider window or check back after the next data update." />
+      ) : (
+        <section className="flex flex-col gap-6">
+          <h2 className="text-lg font-semibold">
+            {teamName} — {statLabel}
+          </h2>
+          <TrendChart
+            points={points}
+            statLabel={statLabel}
+            average={summary?.average ?? null}
+          />
+          {summary && <SummaryStats summary={summary} />}
+        </section>
+      )}
+    </main>
+  )
 }
