@@ -1,7 +1,7 @@
-# starter-template
+# sports-tracker
 
 ## What this project does
-Reusable starter template for Next.js + Vercel + Supabase projects.
+Sports tracking web app built on Next.js + Vercel + Supabase.
 
 ## Stack
 - Next.js (App Router) on Vercel
@@ -41,8 +41,18 @@ Reusable starter template for Next.js + Vercel + Supabase projects.
 - PRs and branches → Vercel generates preview deployment URLs automatically
 - DB migrations must be run separately: `supabase db push`
 
+## Infrastructure
+- Supabase project: `sports-tracker` (ref: `aiojsyqokhcrwpekskim`, org: `wpmrhuaghwdbiabamxjx`, region: `us-east-1`)
+- Vercel project: `sports-tracker` (id: `prj_7HeLmJ1zKqJpOXCAx2jec9m6xAeL`, team: `mcditchmans-projects`)
+- GitHub repo: `https://github.com/mcditchman/sports-tracker`
+
 ## Domain Concepts
-[Replace with project-specific entities, business rules, etc.]
+Sport-agnostic prop-research model (PRD: `docs/PRD_sports_props_research_tool.md`):
+- `sports` → `leagues` → `teams` → `players` (players modeled but unused until player props ship)
+- `matches` (two teams, league, season, kickoff, status) and `stat_types` (per sport: corners, shots, shots_on_target, fouls, yellow_cards, red_cards, possession)
+- `stat_values` stores each team's own per-match value only; "conceded" stats are derived at query time from the opponent's row (`perspective: 'against'` in `src/lib/queries/trends.ts`)
+- Provider adapter pattern: `src/lib/providers/types.ts` defines the interface; `src/lib/providers/api-football/` is the only adapter. New sports/providers = new adapter + stat_type rows, no schema changes.
+- Missing stat values are excluded from averages (never treated as zero); no odds or betting data anywhere.
 
 ## Current State
-[Replace with what's built and what's in progress]
+Soccer MVP implemented (branch `feature/soccer-props-mvp`): schema migration applied to remote Supabase, cron-protected `/api/ingest` route (daily at 06:00 UTC via vercel.json, batches ≤80 stats calls/run to fit API-Football's 100 req/day free tier — full-season backfill takes ~5 daily runs), and the trend dashboard at `/` (league → team → stat → window/venue/opponent → chart + summary). Tests: `npm test` (vitest). Env needs `API_FOOTBALL_KEY`, `API_FOOTBALL_SEASON`, `CRON_SECRET` in addition to the Supabase vars.
