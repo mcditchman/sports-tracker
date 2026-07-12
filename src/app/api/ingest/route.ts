@@ -12,9 +12,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
+  // Default 40/run: free tier allows ~10 req/min and 100 req/day, and a
+  // throttled run of 40 stays under the 300s function limit.
   const limit = Math.max(
     1,
-    Math.min(90, Number(request.nextUrl.searchParams.get('limit') ?? 80))
+    Math.min(90, Number(request.nextUrl.searchParams.get('limit') ?? 40))
   )
   const db = createAdminClient()
 
@@ -84,8 +86,22 @@ export async function GET(request: NextRequest) {
     const pending = finished.filter((m) => m.stat_values.length === 0)
     const batch = pending.slice(0, limit)
 
+    let statsFetched = 0
+    let rateLimited = false
     for (const match of batch) {
-      const lines = await apiFootballAdapter.fetchMatchStats(match.provider_match_id)
+      // ~10 req/min on the free tier; upserts below add a little headroom.
+      if (statsFetched > 0) await new Promise((r) => setTimeout(r, 6500))
+      let lines
+      try {
+        lines = await apiFootballAdapter.fetchMatchStats(match.provider_match_id)
+      } catch (err) {
+        // Rate limit or transient provider error: keep what we have,
+        // the next scheduled run picks up where this one stopped.
+        console.warn(`Stats fetch stopped at match ${match.provider_match_id}:`, err)
+        rateLimited = true
+        break
+      }
+      statsFetched++
       if (lines.length === 0) continue
       const { error: statError } = await db.from('stat_values').upsert(
         lines.flatMap((l) => {
@@ -95,12 +111,13 @@ export async function GET(request: NextRequest) {
             {
               match_id: match.id,
               team_id: teamId,
+              player_id: null,
               stat_type_id: l.statTypeId,
               value: l.value,
             },
           ]
         }),
-        { onConflict: 'match_id,stat_type_id,team_id' }
+        { onConflict: 'match_id,stat_type_id,team_id,player_id' }
       )
       if (statError) throw statError
     }
@@ -108,8 +125,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       teams: teams.length,
       matches: matchRows.length,
-      statsFetched: batch.length,
-      statsRemaining: pending.length - batch.length,
+      statsFetched,
+      statsRemaining: pending.length - statsFetched,
+      rateLimited,
     })
   } catch (err) {
     // Reads keep serving the last ingested data; only this refresh fails.
