@@ -48,19 +48,30 @@ export async function getDataCoverage(
     return teamIds.map((teamId) => ({ teamId, totalMatches: 0, coveredMatches: 0 }))
   }
 
-  const { data: statValues, error: statError } = await supabase
-    .from('stat_values')
-    .select('match_id, team_id')
-    .in(
-      'match_id',
-      matches.map((m) => m.id)
-    )
-    .is('player_id', null)
-  if (statError) throw statError
+  const PAGE_SIZE = 1000
+  const statValues: { match_id: string; team_id: string | null }[] = []
+  let offset = 0
+  while (true) {
+    const { data: page, error: statError } = await supabase
+      .from('stat_values')
+      .select('match_id, team_id')
+      .in(
+        'match_id',
+        matches.map((m) => m.id)
+      )
+      .is('player_id', null)
+      .order('match_id')
+      .range(offset, offset + PAGE_SIZE - 1)
+    if (statError) throw statError
+
+    statValues.push(...(page ?? []))
+    if (!page || page.length < PAGE_SIZE) break
+    offset += PAGE_SIZE
+  }
 
   return computeDataCoverage(
     matches,
-    (statValues ?? []).flatMap((s) =>
+    statValues.flatMap((s) =>
       s.team_id === null ? [] : [{ match_id: s.match_id, team_id: s.team_id }]
     ),
     teamIds
