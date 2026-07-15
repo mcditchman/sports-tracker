@@ -31,3 +31,25 @@ export async function getStatTypes(sportId: string) {
   if (error) throw error
   return data
 }
+
+export async function getRoster(teamId: string) {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('players')
+    .select('id, name')
+    .eq('team_id', teamId)
+    .order('name')
+  if (error) throw error
+  return data
+}
+
+export async function getTeamWithLeague(teamId: string) {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('teams')
+    .select('id, name, league_id, league:leagues!teams_league_id_fkey(id, name, sport_id)')
+    .eq('id', teamId)
+    .single()
+  if (error) throw error
+  return data
+}
