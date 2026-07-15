@@ -1,36 +1,27 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# sports-tracker
+
+A sport-agnostic prop-research tool: ingests team match stats (corners, shots, cards, etc.) from a provider API and surfaces trend dashboards (e.g. "average corners for/against, home vs away, last N matches").
+
+Soccer MVP is live — see [`CLAUDE.md`](./CLAUDE.md) "Current State" for status, and [`docs/PRD_sports_props_research_tool.md`](./docs/PRD_sports_props_research_tool.md) for the product spec.
+
+## Stack
+
+- [Next.js](https://nextjs.org) (App Router) on Vercel
+- [Supabase](https://supabase.com) (Postgres + Auth + Storage)
+- TypeScript, Tailwind CSS
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev       # start Next.js dev server at http://localhost:3000
+npm test          # run vitest unit tests
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`supabase start` / `supabase stop` run the local Supabase stack (requires Docker). Copy env vars with `vercel env pull .env.local`; restart `npm run dev` after editing `.env.local`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+See [`CLAUDE.md`](./CLAUDE.md) for full local dev commands, database conventions, project structure, and data provider gotchas.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deployment
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Push to `master` auto-deploys to production via Vercel; other branches get preview deployments. Database migrations must be applied separately (`supabase db push`).
