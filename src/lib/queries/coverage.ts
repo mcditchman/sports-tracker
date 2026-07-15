@@ -48,19 +48,18 @@ export async function getDataCoverage(
     return teamIds.map((teamId) => ({ teamId, totalMatches: 0, coveredMatches: 0 }))
   }
 
+  // Matches supabase/config.toml's `max_rows = 1000` PostgREST cap; keep in sync if that changes.
   const PAGE_SIZE = 1000
+  const matchIds = matches.map((m) => m.id)
   const statValues: { match_id: string; team_id: string | null }[] = []
   let offset = 0
   while (true) {
     const { data: page, error: statError } = await supabase
       .from('stat_values')
       .select('match_id, team_id')
-      .in(
-        'match_id',
-        matches.map((m) => m.id)
-      )
+      .in('match_id', matchIds)
       .is('player_id', null)
-      .order('id') // id is the unique PK; a total order is required so range() pages don't tie-break inconsistently
+      .order('id') // unique primary key -> total order, required for stable range() pagination
       .range(offset, offset + PAGE_SIZE - 1)
     if (statError) throw statError
 
